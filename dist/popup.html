@@ -1,0 +1,32 @@
+<html>
+<head>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+  <link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/jquerymobile/1.4.5/jquery.mobile.min.css">
+  <script src="https://ajax.googleapis.com/ajax/libs/jquerymobile/1.4.5/jquery.mobile.min.js"></script>
+  <script src="js/popup.js"></script>
+</head>
+<body style="width: 450px">
+    <style>
+        .bottom-three {
+            margin-bottom: 0.3cm;
+            font-family: "Segoe UI", "Lucida Grande", Tahoma, sans-serif;
+            font-size: 100%;
+        }
+    </style>
+    <div>
+      <h2>Bookmark Manager</h2>
+    </div>
+    <div class="bottom-three"> 
+        <button type="button" id="newbookmark">Add Current Page</button>
+    </div>
+    <div class="bottom-three">
+        <input id="foldername">
+        <button type="button" id="newfolder">Create New Folder</button>
+    </div>
+    <div class="bottom-three">
+      <button type="button" id="open">Open</button>
+      <button type="button" id="delete">Delete</button>
+    </div>
+    <ol id="selectable"></ol>
+  </body>
+</html>

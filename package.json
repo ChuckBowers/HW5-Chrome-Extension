@@ -1,0 +1,14 @@
+{
+  "name": "bookmark-manager-chrome-extension",
+  "version": "1.0.0",
+  "description": "chrome-extension-bookmark-manager",
+  "author": "Will Bowers",
+  "dependencies": {
+    "jquery": "~3.2.1"
+  },
+  "devDependencies": {
+    "@types/chrome": "~0.0.49",
+    "@types/jquery": "~3.2.13",
+    "typescript": "~2.5.3"
+  }
+}
