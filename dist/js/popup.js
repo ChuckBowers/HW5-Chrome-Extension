@@ -1,36 +1,44 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
+//import {Observer, Subject} from './interfaces'
 class View {
     constructor(controller) {
         this.controller = controller;
-        this.selected = null;
-        $('html').height(280);
+        this.display();
         $('#newbookmark').click(() => {
+            let newTitle;
+            let newURL;
             chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-                let newTab = tabs[0];
-                let newBookmark = new Bookmark(newTab.title, newTab.url, this.currentFolder);
+                newTitle = tabs[0].title;
+                newURL = tabs[0].url;
+                let newBookmark = new Bookmark(newTitle, newURL, this.controller.getCurrentFolderObj());
+                this.acceptNewBookmark(newBookmark);
             });
         });
         $('#newfolder').click(() => {
-            let newFolder = new Folder($('#foldername').val().toString(), this.currentFolder);
+            let newFolder = new Folder($('#newfoldername').val().toString(), this.controller.getCurrentFolderObj());
+            this.controller.addFolderObj(newFolder);
+            $('#newfoldername').val('');
         });
         $('#open').click(() => {
         });
         $('#delete').click(() => {
         });
     }
+    acceptNewBookmark(bookmark) {
+        this.controller.addFolderObj(bookmark);
+    }
     display() {
-        let parent = this.currentFolder.getParent();
-        if (parent) {
-            let visibleButtons = "<li id=\"1\"class=\"ui-widget-content\">..</li><br>";
-            let index = 2;
-            for (let folderObj of parent.getChildren()) {
-                visibleButtons += "<li id=\"" + index + "\" class=\"ui-widget-content\">" + folderObj.getTitle() + "</li><br>";
-            }
-            $('#selectable').append(visibleButtons);
+        $('html').height(500);
+        let current = this.controller.getCurrentFolderObj();
+        if (current === this.controller.getRootFolderObj()) {
+            $('#selectable-1').append("<li id=\"1\" class=\"ui-widget-content\">" + current.getTitle() + "</li><br>");
         }
         else {
-            $('#selectable').append("<li id=\"1\" class=\"ui-widget-content\">" + this.currentFolder.getTitle() + "</li><br>");
+            let visibleButtons = "<li id=\"1\" class=\"ui-widget-content\">..</li><br>";
+            let index = 2;
+            for (let visible of current.getChildren()) {
+                visibleButtons += "<li id=\"" + index + "\" class=\"ui-widget-content\">" + visible.getTitle() + "</li><br>";
+            }
+            $('#selectable-1').append(visibleButtons);
         }
     }
     notify() {
@@ -42,16 +50,42 @@ class Controller {
         this.model = model;
     }
     getRootFolderObj() {
-        this.model.notifyAll();
         return this.model.getRootFolderObj();
+    }
+    getCurrentFolderObj() {
+        return this.model.getCurrentFolderObj();
+    }
+    setSelected(index) {
+        this.model.setSelected(index);
+    }
+    openSelected() {
+        this.model.notifyAll();
+        return this.model.openSelected();
+    }
+    deleteSelected() {
+        this.model.deleteSelected();
+        this.model.notifyAll();
+    }
+    addFolderObj(obj) {
+        this.model.addFolderObj(obj);
+        this.model.notifyAll();
     }
 }
 class Model {
     constructor(root) {
         this.root = root;
         this.views = [];
-        chrome.storage.sync.set({ "root": root });
-        this.current = root;
+        chrome.storage.sync.get("root", obj => {
+            let prevRoot = obj["root"];
+            console.log(prevRoot);
+            if (prevRoot.title === root.getTitle()) {
+                this.createTree(prevRoot);
+            }
+        });
+        this.current = this.root;
+    }
+    createTree(object) {
+        console.log("DICKSKSKSKSK");
     }
     getRootFolderObj() {
         return this.root;
@@ -66,13 +100,16 @@ class Model {
         }
     }
     openSelected() {
+        let selectedChildren = this.selected.getChildren();
         let returnObject = this.selected.open();
+        if (selectedChildren) {
+            this.current = this.selected;
+        }
         this.selected = null;
         return returnObject;
     }
     deleteSelected() {
-        let selectedParent = this.selected.getParent();
-        selectedParent.deleteChild(this.selected);
+        this.current.deleteChild(this.selected);
         this.selected = null;
     }
     addFolderObj(obj) {
@@ -85,6 +122,7 @@ class Model {
         this.views.splice(this.views.indexOf(observer), 1);
     }
     notifyAll() {
+        chrome.storage.sync.set({ "root": this.root });
         for (let view of this.views) {
             view.notify();
         }
@@ -96,12 +134,8 @@ class Bookmark {
         this.url = url;
         this.parent = parent;
     }
-    addChild(object) {
-        return false;
-    }
-    deleteChild(object) {
-        return false;
-    }
+    addChild(object) { }
+    deleteChild(object) { }
     open() {
         return this.url;
     }
@@ -120,18 +154,14 @@ class Folder {
         this.title = title;
         this.parent = parent;
         this.innerObjects = [];
+        this.url = "not_a_url";
     }
     addChild(object) {
         this.innerObjects.push(object);
-        return true;
     }
     deleteChild(object) {
         let index = this.innerObjects.indexOf(object);
-        if (index === -1) {
-            return false;
-        }
         this.innerObjects.splice(index, 1);
-        return true;
     }
     open() {
         return this.innerObjects;
@@ -149,4 +179,7 @@ class Folder {
         return this.title;
     }
 }
-//let view:View = new View(new Folder("My Folders")); 
+let model = new Model(new Folder("My Bookmarks"));
+let controller = new Controller(model);
+let view = new View(controller);
+model.registerObserver(view);

@@ -4,11 +4,14 @@
   "description": "chrome-extension-bookmark-manager",
   "author": "Will Bowers",
   "dependencies": {
+    "@types/jqueryui": "^1.12.2",
+    "chrome-extension-async": "^3.2.4",
     "jquery": "~3.2.1"
   },
   "devDependencies": {
     "@types/chrome": "~0.0.49",
     "@types/jquery": "~3.2.13",
+    "jquery-ui": "^1.12.1",
     "typescript": "~2.5.3"
   }
 }

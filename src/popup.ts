@@ -1,20 +1,34 @@
-import {Observer, Subject} from './interfaces';
+//import {Observer, Subject} from './interfaces'
+
+interface Observer {
+    notify():void;
+}
+
+interface Subject {
+    notifyAll():void;
+    registerObserver(observer:Observer):void
+    removeObserver(observer:Observer):void
+}
 
 class View implements Observer {
     constructor(private controller:Controller) {
-        $('html').height(280); 
+        this.display();
 
         $('#newbookmark').click(()=> {
+            let newTitle:string;
+            let newURL:string;
             chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-                let newTab:chrome.tabs.Tab = tabs[0];
-                let newBookmark:FolderObject = new Bookmark(newTab.title, newTab.url, this.currentFolder);
-                this.controller.addFolderObj(newBookmark);
+                newTitle = tabs[0].title;
+                newURL = tabs[0].url;
+                let newBookmark:FolderObject = new Bookmark(newTitle, newURL, this.controller.getCurrentFolderObj());
+                this.acceptNewBookmark(newBookmark);
             });
         });
 
         $('#newfolder').click(()=>{
-            let newFolder:FolderObject = new Folder($('#newfoldername').val().toString(), this.controller.getCurrentFolderObj().getParent());
+            let newFolder:FolderObject = new Folder($('#newfoldername').val().toString(), this.controller.getCurrentFolderObj());
             this.controller.addFolderObj(newFolder);
+            $('#newfoldername').val('');
         });
 
         $('#open').click(()=>{
@@ -26,17 +40,22 @@ class View implements Observer {
         });
   }
 
+  private acceptNewBookmark(bookmark:FolderObject):void {
+      this.controller.addFolderObj(bookmark);
+  }
+
   public display():void {
-    let parent:FolderObject|undefined = this.controller.getCurrentFolderObj();
-    if (parent) {
-      let visibleButtons:string = "<li id=\"1\"class=\"ui-widget-content\">..</li><br>";
-      let index:number = 2;
-      for (let folderObj of parent.getChildren()) {
-        visibleButtons += "<li id=\"" + index + "\" class=\"ui-widget-content\">" + folderObj.getTitle() + "</li><br>";
-      }
-      $('#selectable').append(visibleButtons);
+    $('html').height(500);
+    let current:FolderObject = this.controller.getCurrentFolderObj();
+    if (current === this.controller.getRootFolderObj()) {
+        $('#selectable-1').append("<li id=\"1\" class=\"ui-widget-content\">" + current.getTitle() + "</li><br>");
     } else {
-      $('#selectable').append("<li id=\"1\" class=\"ui-widget-content\">" + this.currentFolder.getTitle() + "</li><br>")
+        let visibleButtons:string = "<li id=\"1\" class=\"ui-widget-content\">..</li><br>";
+        let index:number = 2;
+        for (let visible of current.getChildren()) {
+            visibleButtons += "<li id=\"" + index + "\" class=\"ui-widget-content\">" + visible.getTitle() + "</li><br>";
+        }
+        $('#selectable-1').append(visibleButtons);
     }
   }
 
@@ -44,6 +63,7 @@ class View implements Observer {
       this.display();
   }
 }
+
 
 class Controller {
     constructor(private model:Model) {}
@@ -83,8 +103,32 @@ class Model implements Subject {
     private selected:FolderObject;
 
     constructor(private root:FolderObject) {
-        chrome.storage.sync.set({"root":root});
-        this.current = root;
+        chrome.storage.sync.get("root", obj => {
+            let prevRoot = obj["root"];
+            console.log(prevRoot);
+            if (prevRoot.title === root.getTitle()) {
+                this.root = this.createTreeRoot(prevRoot);
+            }
+        });
+        
+        this.current = this.root;
+    }
+
+    private createTreeRoot(object):FolderObject {
+        let treeRoot:FolderObject = new Folder(object.title);
+        if (object.innerObjects.length > 0) {
+            for (let obj of object.innerObjects) {
+                treeRoot.addChild(this.fillTree(obj))
+            }
+        }
+        return treeRoot;
+    }
+
+    private fillTree(object):FolderObject {
+        if (object.isBookmark) {
+            return new Bookmark(object.title, object.url);
+        }
+
     }
 
     public getRootFolderObj():FolderObject {
@@ -103,14 +147,17 @@ class Model implements Subject {
     }
 
     public openSelected():FolderObject[] | string {
+        let selectedChildren:FolderObject[]|null = this.selected.getChildren();
         let returnObject:FolderObject[]|string = this.selected.open();
+        if (selectedChildren) {
+            this.current = this.selected;
+        }
         this.selected = null;
         return returnObject;
     }
 
     public deleteSelected():void {
-        let selectedParent = this.selected.getParent();
-        selectedParent.deleteChild(this.selected);
+        this.current.deleteChild(this.selected);
         this.selected = null;
     }
 
@@ -127,6 +174,7 @@ class Model implements Subject {
       }
     
     public notifyAll():void {
+        chrome.storage.sync.set({"root":this.root});
         for (let view of this.views) {
             view.notify();
         }
@@ -134,8 +182,8 @@ class Model implements Subject {
 }
 
 interface FolderObject {
-  addChild(object:FolderObject):boolean;
-  deleteChild(object:FolderObject):boolean;
+  addChild(object:FolderObject):void;
+  deleteChild(object:FolderObject):void;
   open():FolderObject[] | string;
   getParent():FolderObject | undefined;
   getChildren():FolderObject[] | null;
@@ -143,15 +191,13 @@ interface FolderObject {
 }
 
 class Bookmark implements FolderObject {
-  constructor(private title:string, private url:string, private parent:FolderObject) {}
+    private isBookmark:boolean = true;
 
-  addChild(object:FolderObject):boolean {
-    return false;
-  }
+  constructor(private title:string, private url:string, private parent?:FolderObject) {}
 
-  deleteChild(object:FolderObject):boolean {
-    return false;
-  }
+  addChild(object:FolderObject):void {}
+
+  deleteChild(object:FolderObject):void {}
 
   open():FolderObject[] | string {
     return this.url;
@@ -172,21 +218,17 @@ class Bookmark implements FolderObject {
 
 class Folder implements FolderObject {
   private innerObjects:FolderObject[] = [];
+  private isBookmark:boolean = false;
 
-  constructor(private title:string, private parent:FolderObject) {}
+  constructor(private title:string, private parent?:FolderObject) {}
 
-  addChild(object:FolderObject):boolean {
+  addChild(object:FolderObject):void {
     this.innerObjects.push(object);
-    return true;
   }
 
-  deleteChild(object:FolderObject):boolean {
+  deleteChild(object:FolderObject):void {
     let index:number = this.innerObjects.indexOf(object);
-    if (index === -1) {
-      return false;
-    }
     this.innerObjects.splice(index, 1);
-    return true;
   }
 
   open():FolderObject[] | string {
@@ -209,4 +251,7 @@ class Folder implements FolderObject {
   }
 }
 
-//let view:View = new View(new Folder("My Folders"));
+let model = new Model(new Folder("My Bookmarks"));
+let controller:Controller = new Controller(model);
+let view:Observer = new View(controller);
+model.registerObserver(view);
