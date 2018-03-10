@@ -1,7 +1,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>My First CAD</title>
+    <title>Bookmark Manager</title>
     <style>
             #selectable-1 .ui-selecting { background: #707070 ; }
             #selectable-1 .ui-selected { background: #EEEEEE; color: #000000; }
@@ -28,17 +28,18 @@
       <h2>Bookmark Manager</h2>
     </div>
     <div class="bottom-three"> 
+        <button type="button" id="showbookmarks">Show Bookmarks</button>
         <button type="button" id="newbookmark">Add Current Page</button>
     </div>
     <div class="bottom-three">
-        <input id="newfoldername">
-        <button type="button" id="newfolder">Create New Folder</button>
+        <input id="searchvalue">
+        <button type="button" id="search">Search</button>
     </div>
-    <ol id="selectable-1"></ol>
     <div class="bottom-three">
-        <button type="button" id="open">Open</button>
-        <button type="button" id="delete">Delete</button>
+        <button type="button" id="delete">Delete All</button>
     </div>
+    <div id="links"></div>
+    <div id="currentTab"></div>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
     <link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/themes/smoothness/jquery-ui.css">
     <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>

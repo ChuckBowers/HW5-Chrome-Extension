@@ -1,5 +1,3 @@
-//import {Observer, Subject} from './interfaces'
-
 interface Observer {
     notify():void;
 }
@@ -10,53 +8,66 @@ interface Subject {
     removeObserver(observer:Observer):void
 }
 
+// visual representation of the data, communicates with Model via Observer pattern
 class View implements Observer {
+    private currentPageAdded:boolean = false;
+
     constructor(private controller:Controller) {
-        this.display();
+        // getting the current page URL (page popup is opened in)
+        chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+            $('#currentTab').val("" + tabs[0].title + "|" + tabs[0].url);
+        });
 
         $('#newbookmark').click(()=> {
-            let newTitle:string;
-            let newURL:string;
-            chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-                newTitle = tabs[0].title;
-                newURL = tabs[0].url;
-                let newBookmark:FolderObject = new Bookmark(newTitle, newURL, this.controller.getCurrentFolderObj());
-                this.acceptNewBookmark(newBookmark);
-            });
+            this.newBookmark();
         });
 
-        $('#newfolder').click(()=>{
-            let newFolder:FolderObject = new Folder($('#newfoldername').val().toString(), this.controller.getCurrentFolderObj());
-            this.controller.addFolderObj(newFolder);
-            $('#newfoldername').val('');
+        $('#showbookmarks').click(() => {
+            this.showBookmarks();
         });
 
-        $('#open').click(()=>{
-            
+        $('#search').click(()=>{
+            this.search();
         });
 
         $('#delete').click(()=>{
-            
+            this.delete();
         });
   }
 
-  private acceptNewBookmark(bookmark:FolderObject):void {
-      this.controller.addFolderObj(bookmark);
+  private newBookmark():void {
+    let thisPage:string = $('#currentTab').val().toString();
+    let pageInfo:string[] = thisPage.split('|');
+    let newBookmark:FolderObject = new Bookmark(pageInfo[0], pageInfo[1]);
+    if (!(this.currentPageAdded)) {
+        this.controller.addFolderObj(newBookmark);
+        this.currentPageAdded = true;
+    }
+  }
+
+  private showBookmarks():void {
+    this.display();
+  }
+
+  private search():void {
+    let searchValue:string = $('#searchvalue').val().toString();
+    $('#searchvalue').val('');
+    this.controller.searchFolderObj(searchValue);
+  }
+
+  private delete():void {
+    this.controller.deleteAllObj();
+    this.currentPageAdded = false;
   }
 
   public display():void {
-    $('html').height(500);
-    let current:FolderObject = this.controller.getCurrentFolderObj();
-    if (current === this.controller.getRootFolderObj()) {
-        $('#selectable-1').append("<li id=\"1\" class=\"ui-widget-content\">" + current.getTitle() + "</li><br>");
-    } else {
-        let visibleButtons:string = "<li id=\"1\" class=\"ui-widget-content\">..</li><br>";
-        let index:number = 2;
-        for (let visible of current.getChildren()) {
-            visibleButtons += "<li id=\"" + index + "\" class=\"ui-widget-content\">" + visible.getTitle() + "</li><br>";
-        }
-        $('#selectable-1').append(visibleButtons);
+    $('#links').contents().remove();
+    let folderObjs:FolderObject[] = this.controller.getFolderObjs();
+    let visibleButtons:string = "";
+    for (let visible of folderObjs) {
+        visibleButtons += "<a href=\"" + visible.open() + "\">" + visible.getTitle() + "</a><br>";
     }
+    $('#links').append(visibleButtons);
   }
 
   public notify():void {
@@ -64,29 +75,17 @@ class View implements Observer {
   }
 }
 
-
+// controller intermediary between View and Model
 class Controller {
     constructor(private model:Model) {}
 
-    public getRootFolderObj():FolderObject {
-        return this.model.getRootFolderObj();
-    }
-
-    public getCurrentFolderObj():FolderObject {
-        return this.model.getCurrentFolderObj();
-    }
-
-    public setSelected(index:number) {
-        this.model.setSelected(index);
-    }
-
-    public openSelected():FolderObject[] | string {
+    public deleteAllObj():void {
+        this.model.deleteAllObj();
         this.model.notifyAll();
-        return this.model.openSelected();
     }
 
-    public deleteSelected():void {
-        this.model.deleteSelected();
+    public searchFolderObj(searchValue:string) {
+        this.model.searchFolderObj(searchValue);
         this.model.notifyAll();
     }
 
@@ -95,74 +94,77 @@ class Controller {
         this.model.notifyAll();
     }
 
+    public getFolderObjs():FolderObject[] {
+        return this.model.getFolderObjs();
+    }
+
 }
 
+// represents data and communicates with View via Observer pattern
 class Model implements Subject {
     private views:Observer[] = [];
-    private current:FolderObject; // always a Folder object
     private selected:FolderObject;
+    private viewableObjs:FolderObject[] = [];
+    
 
-    constructor(private root:FolderObject) {
+    constructor(private root:Folder) {
+        // retrieving the data from Chrome storage, ensures data is persistant
+        // between windows
         chrome.storage.sync.get("root", obj => {
             let prevRoot = obj["root"];
-            console.log(prevRoot);
-            if (prevRoot.title === root.getTitle()) {
-                this.root = this.createTreeRoot(prevRoot);
+            if (prevRoot && prevRoot.title === root.getTitle()) {
+                // previous data found
+                this.root = this.createBookmarks(prevRoot);
+            } else {
+                // no previous data found
+                this.root = new Folder(root.getTitle());
             }
+            this.viewableObjs = this.root.getFolderObjs();
         });
-        
-        this.current = this.root;
     }
 
-    private createTreeRoot(object):FolderObject {
-        let treeRoot:FolderObject = new Folder(object.title);
-        if (object.innerObjects.length > 0) {
-            for (let obj of object.innerObjects) {
-                treeRoot.addChild(this.fillTree(obj))
+    // creates FolderObject objects from array stored
+    // in Chrome storage
+    private createBookmarks(root):Folder {
+        let newRoot:Folder = new Folder(root.title);
+        
+        for (let obj of root.innerObjects) {
+            let newFolderObj:FolderObject = new Bookmark(obj.title, obj.url);
+            newRoot.addFolderObj(newFolderObj);
+        }
+
+        return newRoot;
+    }
+
+    public deleteAllObj():void {
+       this.viewableObjs = [];
+    }
+
+    public searchFolderObj(searchValue:string):void {
+        let allObj:FolderObject[] = this.root.getFolderObjs();
+        this.viewableObjs = [];
+
+        for (let obj of allObj) {
+            // assigning FolderObjects matching given string
+            let title:string = obj.getTitle().toLowerCase();
+            if (title.indexOf(searchValue.toLowerCase()) != -1) {
+                this.viewableObjs.push(obj);
             }
         }
-        return treeRoot;
-    }
-
-    private fillTree(object):FolderObject {
-        if (object.isBookmark) {
-            return new Bookmark(object.title, object.url);
-        }
-
-    }
-
-    public getRootFolderObj():FolderObject {
-        return this.root;
-    }
-
-    public getCurrentFolderObj():FolderObject {
-        return this.current;
-    }
-
-    public setSelected(index:number):void {
-        let visibleObjects:FolderObject[]|null = this.current.getChildren();
-        if (visibleObjects) {
-            this.selected = visibleObjects[index];
+        // if not string given all values displayed
+        if (searchValue == "") {
+            this.viewableObjs = this.root.getFolderObjs();
         }
     }
 
-    public openSelected():FolderObject[] | string {
-        let selectedChildren:FolderObject[]|null = this.selected.getChildren();
-        let returnObject:FolderObject[]|string = this.selected.open();
-        if (selectedChildren) {
-            this.current = this.selected;
-        }
-        this.selected = null;
-        return returnObject;
+    public addFolderObj(newObj:FolderObject):void {
+        let folderObjs:FolderObject[] = this.root.getFolderObjs();
+    
+        this.root.addFolderObj(newObj);
     }
 
-    public deleteSelected():void {
-        this.current.deleteChild(this.selected);
-        this.selected = null;
-    }
-
-    public addFolderObj(obj:FolderObject):void {
-        this.current.addChild(obj);
+    public getFolderObjs():FolderObject[] {
+        return this.viewableObjs;
     }
 
     public registerObserver(observer:Observer) {
@@ -174,6 +176,7 @@ class Model implements Subject {
       }
     
     public notifyAll():void {
+        // saving data to Chrome storage
         chrome.storage.sync.set({"root":this.root});
         for (let view of this.views) {
             view.notify();
@@ -182,75 +185,49 @@ class Model implements Subject {
 }
 
 interface FolderObject {
-  addChild(object:FolderObject):void;
-  deleteChild(object:FolderObject):void;
-  open():FolderObject[] | string;
-  getParent():FolderObject | undefined;
-  getChildren():FolderObject[] | null;
+  open():string;
   getTitle():string;
 }
 
+// individual bookmark objects that get displayed
 class Bookmark implements FolderObject {
     private isBookmark:boolean = true;
 
-  constructor(private title:string, private url:string, private parent?:FolderObject) {}
+    constructor(private title:string, private url:string) {}
 
-  addChild(object:FolderObject):void {}
+    public open():string {
+        return this.url;
+    }
 
-  deleteChild(object:FolderObject):void {}
-
-  open():FolderObject[] | string {
-    return this.url;
-  }
-
-  getParent():FolderObject {
-    return this.parent;
-  }
-
-  getChildren():FolderObject[] | null {
-      return null;
-  }
-
-  getTitle():string {
-    return this.title;
-  }
+    public getTitle():string {
+        return this.title;
+    }
 }
 
-class Folder implements FolderObject {
-  private innerObjects:FolderObject[] = [];
-  private isBookmark:boolean = false;
+// contains Bookmarks/ objects of type FolderObject
+class Folder {
+    private innerObjects:FolderObject[] = [];
 
-  constructor(private title:string, private parent?:FolderObject) {}
+    constructor(private title:string) {}
 
-  addChild(object:FolderObject):void {
-    this.innerObjects.push(object);
-  }
+    public getTitle():string {
+        return this.title;
+    }
 
-  deleteChild(object:FolderObject):void {
-    let index:number = this.innerObjects.indexOf(object);
-    this.innerObjects.splice(index, 1);
-  }
+    public addFolderObj(bookmark:FolderObject):void {
+        this.innerObjects.push(bookmark);
+    }
 
-  open():FolderObject[] | string {
-    return this.innerObjects;
-  }
+    public getFolderObjs():FolderObject[] {
+        return this.innerObjects;
+    }
 
-  getParent():FolderObject {
-      return this.parent;
-  }
-
-  getChildren():FolderObject[] | null {
-      if (this.innerObjects.length == 0) {
-          return null;
-      }
-      return this.innerObjects;
-  }
-
-  getTitle():string {
-    return this.title;
-  }
+    public deleteAllObj():void {
+        this.innerObjects = [];
+    }
 }
 
+// initiates JavaScript
 let model = new Model(new Folder("My Bookmarks"));
 let controller:Controller = new Controller(model);
 let view:Observer = new View(controller);
