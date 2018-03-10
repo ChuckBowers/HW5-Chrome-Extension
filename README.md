@@ -1,7 +1,9 @@
 # HW5-Chrome-Extension
 
 Name: Bookmark Manager
+
 Author: Will Bowers
+
 Description: This is a Chrome Extension that allows users to create bookmarks 
              independent of the Chrome Bookmarks. 'Show Bookmarks' shows all the
              bookmarks saved for that user. 'Add Current Tab' adds the current
